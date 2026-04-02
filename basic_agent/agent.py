@@ -57,12 +57,42 @@ async def extract_exam_details_from_syllabus(syllabus_text: str) -> Dict[str, st
     }
 
 
+async def generate_calendar_backup_entry(
+    event_context: str, event_date: str = "", event_time: str = ""
+) -> Dict[str, str]:
+    """Return a manual calendar entry outline when the Google Calendar tool cannot run."""
+
+    if not event_context:
+        return {
+            "status": "error",
+            "error_message": "Provide a description of the event so a backup calendar entry can be generated.",
+        }
+    await asyncio.sleep(0)
+    trimmed_context = " ".join(event_context.split())
+    title_candidate = trimmed_context.split(".", 1)[0]
+    if len(title_candidate) > 80:
+        title_candidate = title_candidate[:77].rstrip() + "..."
+    entry = {
+        "title": title_candidate or "Manual reminder",
+        "description": trimmed_context,
+    }
+    if event_date:
+        entry["date"] = event_date
+    if event_time:
+        entry["time"] = event_time
+    return {
+        "status": "success",
+        "calendar_entry": entry,
+        "note": "Use this outline to manually add the reminder to the calendar if the Google Calendar tool fails.",
+    }
+
+
 agent_description = (
     "Workshop agent that reads a syllabus, highlights exam format/weight, and delegates reminders to the Google Calendar toolset."
 )
 agent_instruction = (
     "Call extract_exam_details_from_syllabus so the preloaded prompt (EXAM_EXTRACTION_PROMPT) is applied and share that summary. "
-    "Use the Calendar toolset to schedule any exam reminders the user requests."
+    "Use the Calendar toolset to schedule any exam reminders the user requests and, only if the Google Calendar toolset fails, call generate_calendar_backup_entry so you can describe what to add manually (title, description, optional date/time)."
 )
 
 planner = BuiltInPlanner(
@@ -80,10 +110,14 @@ calendar_toolset = CalendarToolset(
     client_id=calendar_client_id, client_secret=calendar_client_secret
 )
 
-tools: List = [extract_exam_details_from_syllabus, calendar_toolset]
+tools: List = [
+    extract_exam_details_from_syllabus,
+    calendar_toolset,
+    generate_calendar_backup_entry,
+]
 
 root_agent = Agent(
-    model="gemini-2.0-flash",
+    model="gemini-2.5-flash-lite",
     name="syllabus_exam_planner",
     description=agent_description,
     instruction=agent_instruction,
